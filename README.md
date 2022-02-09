@@ -4,6 +4,14 @@
 
 Julia package for loading Philips' PAR/REC and XML/REC files.
 
+## Installation
+
+ParXRec requires Julia v1.0 or later.
+
+```julia
+julia> ]add ParXRec
+```
+
 ## Usage
 
 Load PAR/XML header and REC data:
