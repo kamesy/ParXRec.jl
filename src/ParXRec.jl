@@ -1071,7 +1071,12 @@ _parse(type, str) = parse(type, str)
 
 _parse(::Type{String}, str::AbstractString) = String(str)
 _parse(::Type{Time}, str::AbstractString) = Time(str, dateformat"H:M:S")
-_parse(::Type{Date}, str::AbstractString) = Date(str, dateformat"y.m.d")
+_parse(::Type{Date}, str::AbstractString) =
+    try
+        Date(str, dateformat"y.m.d")
+    catch
+        Date(str, dateformat"d.m.y")
+    end
 
 _parse(::Type{Bool}, str::AbstractString) =
     str[1] == '0' || uppercase(str[1]) == 'N' ? false :
