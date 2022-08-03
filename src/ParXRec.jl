@@ -692,6 +692,7 @@ Load .PAR header.
 """
 function readpar(path::AbstractString)
     version = ""
+    gyrotools = false
 
     series = SeriesInfo()
     images = Vector{ImageInfo}()
@@ -715,6 +716,9 @@ function readpar(path::AbstractString)
             end
             iter = iterate(doc, state)
             break
+
+        elseif occursin(r"GyroTools|gyrotools", line)
+            gyrotools = true
         end
 
         iter = iterate(doc, state)
@@ -761,7 +765,11 @@ function readpar(path::AbstractString)
 
         ks, vs = strip.(split(line[2:end], ": "))
 
-        if v3 && occursin("[msec]", ks)
+        if gyrotools && ks == "Patient Position"
+            ks = "Patient position"
+        end
+
+        if (gyrotools || v3) && occursin("[msec]", ks)
             ks = replace(ks, "[msec]" => "[ms]")
         end
 
