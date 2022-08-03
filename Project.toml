@@ -1,7 +1,7 @@
 name = "ParXRec"
 uuid = "ce505a99-8540-44bd-8e52-2947982c0c75"
 authors = ["kamesy <ckames@physics.ubc.ca>"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 AxisArrays = "39de3d68-74b9-583c-8d2d-e117c070f3a9"
