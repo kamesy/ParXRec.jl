@@ -29,8 +29,9 @@ rec = ParXRec.load("file.{PAR, XML, REC}", load_data = false)
 hdr = rec.hdr
 ```
 
-Extract voxel size and echo times from header:
+Extract data dimensions, voxel size, and echo times from header:
 ```julia
+sz  = datadims(hdr)
 vsz = voxelsize(hdr)
 TEs = echotimes(hdr)
 ```

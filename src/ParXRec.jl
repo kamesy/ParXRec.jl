@@ -7,12 +7,12 @@ using LightXML
 using Printf
 
 
-export readrec, readpar, readxml, echotimes, voxelsize, recdims
+export readrec, readpar, readxml, echotimes, voxelsize, recinds, recdims, datadims
 
 
-###
-### Types
-###
+#####
+##### Types
+#####
 
 const UNKNOWN_KEY = :Other
 
@@ -267,9 +267,9 @@ struct Rec{A<:Union{Nothing, AbstractArray}}
 end
 
 
-###
-### Interface
-###
+#####
+##### Interface
+#####
 
 """
     load(path; kwargs...) = load(Float32, path; kwargs...)
@@ -283,16 +283,16 @@ end
 
 Load Philips PAR/REC or XML/REC header and data array.
 
-### Arguments
+##### Arguments
 - `path::AbstractString`: path to .REC or .XML or .PAR file
 
-### Keywords
+##### Keywords
 - `load_data::Bool = true`: load data and header (true) or header only (false)
 - `scale_data::Bool = true`: scale data array with
     `(data + rescale slope * rescale intercept) / scale slope` (true) or
     return raw array (false)
 
-### Returns
+##### Returns
 - `Rec{Union{Nothing, AxisArray}}`: struct containing header and data array
     if `load_data = true` or nothing if `load_data = false`
 """
@@ -319,9 +319,9 @@ function load(
 end
 
 
-###
-### .REC
-###
+#####
+##### .REC
+#####
 
 const _RECPREC = Dict{Int, DataType}(
     8  => UInt8,
@@ -342,16 +342,16 @@ const _RECPREC = Dict{Int, DataType}(
 
 Load .REC file.
 
-### Arguments
+##### Arguments
 - `path::AbstractString`: path to .REC file
 - `hdr::RecHeader`: struct containing .PAR or .XML header
 
-### Keywords
+##### Keywords
 - `scale_data::Bool = true`: scale data array with
     `(data + rescale slope * rescale intercept) / scale slope` (true) or
     return raw array (false)
 
-### Returns
+##### Returns
 - `AxisArray`: .REC data array
 """
 readrec(path, hdr; kwargs...) = readrec(Float32, path, hdr; kwargs...)
@@ -369,31 +369,16 @@ function readrec(
     ps = Int(imgs[1].Pixel_Size)
     TR = _RECPREC[ps]
 
-    dims = recdims(hdr)
-
-    ax0 = (
-        nx       = maximum(dims[:nx]),
-        ny       = maximum(dims[:ny]),
-        nz       = maximum(dims[:nz]),
-        echoes   = maximum(dims[:echoes]),
-        dynamics = maximum(dims[:dynamics]),
-        phases   = maximum(dims[:phases]),
-        bvals    = maximum(dims[:bvals]),
-        grads    = maximum(dims[:grads]),
-        labels   = length(dims[:labels]),
-        types    = length(dims[:types]),
-        seqs     = length(dims[:seqs]),
-    )
-
-    # remove singleton dimensions but keep nx, ny, nz
-    ax = (; [(a, n) for (a, n) in pairs(ax0) if n > 1 || a ∈ (:nx, :ny, :nz)]...)
+    inds = recinds(hdr)
+    ax0 = recdims(inds)
+    ax = datadims(inds)
 
     nx = ax[:nx]
     ny = ax[:ny]
 
-    labels = Dict(k => i for (i, k) in enumerate(dims[:labels]))
-    types = Dict(k => i for (i, k) in enumerate(dims[:types]))
-    seqs = Dict(k => i for (i, k) in enumerate(dims[:seqs]))
+    labels = Dict(k => i for (i, k) in enumerate(inds[:labels]))
+    types = Dict(k => i for (i, k) in enumerate(inds[:types]))
+    seqs = Dict(k => i for (i, k) in enumerate(inds[:seqs]))
 
     L = LinearIndices(values(ax0))
     data = zeros(T, values(ax))
@@ -444,9 +429,9 @@ function readrec(
 end
 
 
-###
-### .XML
-###
+#####
+##### .XML
+#####
 
 const _XML_HEADER           = "PRIDE_V5"
 const _XML_SERIES_HEADER    = "Series_Info"
@@ -461,10 +446,10 @@ const _XML_ATTRIB_HEADER    = "Attribute"
 
 Load .XML header.
 
-### Arguments
+##### Arguments
 - `path::AbstractString`: path to .XML file
 
-### Returns
+##### Returns
 - `RecHeader`: struct containing .XML header
 """
 function readxml(path::AbstractString)
@@ -540,9 +525,9 @@ function sethdr!(h, T::NamedTuple, e::XMLElement)
 end
 
 
-###
-### .PAR
-###
+#####
+##### .PAR
+#####
 
 const _PARSERIES = Dict{String, Union{Symbol, Tuple}}(
     "Patient name"                        => :Patient_Name,
@@ -684,10 +669,10 @@ const _PARIMAGE3 = Dict{Int, Symbol}(
 
 Load .PAR header.
 
-### Arguments
+##### Arguments
 - `path::AbstractString`: path to .PAR file
 
-### Returns
+##### Returns
 - `RecHeader`: struct containing .PAR header
 """
 function readpar(path::AbstractString)
@@ -874,21 +859,21 @@ function readpar(path::AbstractString)
 end
 
 
-###
-### Utility
-###
+#####
+##### Utility
+#####
 
 """
     echotimes(R::Rec)
     echotimes(H::RecHeader)
-    echotimes(I::AbstractArray{ImageInfo}) -> NTuple{N, Float64}
+    echotimes(I::AbstractArray{ImageInfo}) -> Vector{Float64}
 
 Get echo times (in seconds).
 """
 echotimes(R::Rec) = echotimes(R.hdr)
 echotimes(H::RecHeader) = echotimes(H.images)
 echotimes(I::AbstractArray{ImageInfo}) =
-    1e-3 .* (sort!(unique!((i -> i.Echo_Time).(I)))...,)
+    1e-3 .* sort!(unique!((i -> i.Echo_Time).(I)))
 
 
 """
@@ -907,11 +892,55 @@ voxelsize(I::AbstractArray{ImageInfo}) =
 
 
 """
-    recdims(H::RecHeader) -> Dict{Symbol, Int}
+    recdims(R::Rec)
+    recdims(H::RecHeader) -> NamedTuple
+
+Get data dimensions, including singleton dimensions.
+"""
+recdims(R::Rec) = recdims(R.hdr)
+recdims(H::RecHeader) = recdims(recinds(H))
+
+function recdims(inds::Dict{Symbol, Vector})
+    ax = (;
+        nx       = maximum(inds[:nx]),
+        ny       = maximum(inds[:ny]),
+        nz       = maximum(inds[:nz]),
+        echoes   = maximum(inds[:echoes]),
+        dynamics = maximum(inds[:dynamics]),
+        phases   = maximum(inds[:phases]),
+        bvals    = maximum(inds[:bvals]),
+        grads    = maximum(inds[:grads]),
+        labels   = length(inds[:labels]),
+        types    = length(inds[:types]),
+        seqs     = length(inds[:seqs]),
+    )
+
+    return ax
+end
+
+
+"""
+    datadims(R::Rec)
+    datadims(H::RecHeader) -> NamedTuple
+
+Get data dimensions, filtering out singleton dimensions.
+"""
+datadims(R::Rec) = datadims(R.hdr)
+datadims(H::RecHeader) = datadims(recinds(H))
+datadims(inds::Dict{Symbol, Vector}) = datadims(recdims(inds))
+
+function datadims(ax::NamedTuple)
+    ax = (; [(a, n) for (a, n) in pairs(ax) if n > 1 || a ∈ (:nx, :ny, :nz)]...)
+    return ax
+end
+
+
+"""
+    recinds(H::RecHeader) -> Dict{Symbol, Vector}
 
 Array dimensions for REC data array from .PAR/.XML header. Dict is unordered.
 
-### Keys
+##### Keys
 - `:nx`
 - `:ny`
 - `:nz`
@@ -924,33 +953,33 @@ Array dimensions for REC data array from .PAR/.XML header. Dict is unordered.
 - `:types`
 - `:seqs`
 """
-function recdims(H::RecHeader)
+function recinds(H::RecHeader)
     K = (i -> i.Key).(H.images)
 
-    @inline fun(f, k; by=identity) = sort!(unique!(f.(k)), by=by)
+    sortunique(f, k; by=identity) = sort!(unique!(f.(k)), by=by)
 
-    nx       = fun(i -> i.Resolution_X, H.images)
-    ny       = fun(i -> i.Resolution_Y, H.images)
-    nz       = fun(k -> k.Slice, K)
+    nx       = sortunique(i -> i.Resolution_X, H.images)
+    ny       = sortunique(i -> i.Resolution_Y, H.images)
+    nz       = sortunique(k -> k.Slice, K)
 
-    echoes   = fun(k -> k.Echo, K)
-    dynamics = fun(k -> k.Dynamic, K)
-    phases   = fun(k -> k.Phase, K)
-    bvals    = fun(k -> k.BValue, K)
-    grads    = fun(k -> k.Grad_Orient, K)
+    echoes   = sortunique(k -> k.Echo, K)
+    dynamics = sortunique(k -> k.Dynamic, K)
+    phases   = sortunique(k -> k.Phase, K)
+    bvals    = sortunique(k -> k.BValue, K)
+    grads    = sortunique(k -> k.Grad_Orient, K)
 
-    labels   = fun(k -> k.Label_Type, K)
-    seqs     = fun(k -> k.Sequence, K)
+    labels   = sortunique(k -> k.Label_Type, K)
+    seqs     = sortunique(k -> k.Sequence, K)
 
     # derived images have type = -1 in .PAR.
     # differentiate based on rescale intercept.
-    types    = fun(
+    types    = sortunique(
         i -> (i.Key.Type, i.Rescale_Intercept),
         H.images,
         by = t -> (t[1], abs(t[2])) # phase -3142, mag 0 -> flip order
     )
 
-    return Dict(
+    return Dict{Symbol, Vector}(
         :nx       => nx,
         :ny       => ny,
         :nz       => nz,
@@ -968,9 +997,9 @@ function recdims(H::RecHeader)
 end
 
 
-###
-### Misc
-###
+#####
+##### Misc
+#####
 
 function parxrec_paths(path::AbstractString, load_data::Bool)
     !isfile(path) && error("File `$path` does not exist")
